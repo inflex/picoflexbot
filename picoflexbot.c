@@ -18,6 +18,7 @@
 #define BACKBUFFER_SIZE 100		// how many lines of conversation to keep (this memory is permanently used!)
 #define BACKBUFFER_STR_SIZE 1024	// how big each line can be (1K is more than ample in most cases)
 
+
 int conn;
 char sbuf[NETBUF_SIZE];
 
@@ -41,31 +42,99 @@ int main( int argc, char **argv ) {
 	/** You need to customise this portion of the code for your bot to work properly
 	 * 
 	 */
-	char *nick = "name of your bot";
-	char *channel = "#channel to join";
-	char *host = "server to join";
-	char *port = "6667";
+	char *nick;
+	char *channel;
+	char *server;
+	char *port;
 
 	char *user, *command, *where, *message, *sep, *target;
 	int i, j, l, sl, o = -1, start, wordcount;
 	char buf[NETBUF_SIZE +1];
+	char fname[BACKBUFFER_STR_SIZE+1];
 	struct addrinfo hints, *res;
+
+	if (argc != 5) {
+		fprintf(stdout,"Usage: %s <nickname> <channel> <server> <port>\n", argv[0]);
+		exit(1);
+	}
+
+	/** Get our command line parameters
+	 *
+	 * We should really use flagged parameters, such as -n -c -s -p but 
+	 * for now we'll keep it simpler/brittle.
+	 */
+	nick = argv[1];
+	channel = argv[2];
+	server = argv[3];
+	port = argv[4];
+
 
 	si = ei = bc = 0;
 	start = 0;
 
+	/** Load log file back in to the buffer
+	 * 
+	 * It's a pain there's no simple way to do this cleanly
+	 */
+	snprintf(fname, sizeof(fname),"%s-%s-%s.log", server, channel, nick);
+	f = fopen(fname, "r");
+	if (!f) {
+		fprintf(stderr,"Can't open log file (%s)\n", strerror(errno));
+
+	} else {
+		while (1) {
+			int c, bp;
+			/** load the next line from the old log 
+			 */
+			bp = 0;
+
+			chanbuf[ei][0] = '\0';
+			while (bp < BACKBUFFER_STR_SIZE-1) {
+				c = fgetc(f);
+				if (c == EOF) {
+				  	break;
+				}
+
+				if ( c == '\r') continue;
+				if ( c == '\n') break;
+
+				chanbuf[ei][bp] = c;
+				bp++;
+
+			}
+
+			chanbuf[ei][bp] = '\0';
+
+			fprintf(stdout, "%d:%s\n", ei, chanbuf[ei]);
+
+			if (c == EOF) break;
+
+			ei++; bc++;
+			if (bc >= BACKBUFFER_SIZE) {
+				si++;
+				bc = BACKBUFFER_SIZE;
+			}
+			ei = ei%BACKBUFFER_SIZE;
+			si = si%BACKBUFFER_SIZE;
+		} // while more data in the log
+		fclose(f);
+	} // if file opened
+
 	/** Set the log output file
 	*/
-	f = fopen("picoflexbot.log","a");
+	f = fopen(fname,"a");
 	if (!f) {
 		fprintf(stderr,"Can't open log file (%s)\n", strerror(errno));
 		exit(1);
 	}
+	
+//	exit(1);
 
+	fprintf(stdout,"Connecting to server: %s:%s, channel %s, as user %s\n", server, port, channel, nick);
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
-	getaddrinfo(host, port, &hints, &res);
+	getaddrinfo(server, port, &hints, &res);
 	conn = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 	connect(conn, res->ai_addr, res->ai_addrlen);
 
@@ -77,11 +146,15 @@ int main( int argc, char **argv ) {
 			o++;
 			buf[o] = sbuf[i];
 			if ((i > 0 && sbuf[i] == '\n' && sbuf[i - 1] == '\r') || o == NETBUF_SIZE) {
+
+				if (buf[o] == '\n') buf[o] = '\0';
+				if (buf[o-1] == '\r') buf[o-1] = '\0';
+
 				buf[o + 1] = '\0';
 				l = o;
 				o = -1;
 
-				printf(">> %s", buf);
+				printf(">> %s\n", buf);
 
 				if (!strncmp(buf, "PING", 4)) {
 					buf[1] = 'O';
@@ -117,7 +190,7 @@ int main( int argc, char **argv ) {
 							// Channel chat
 							target = where;
 							fprintf(f,"%s: %s\n", user, message);
-							snprintf(chanbuf[ei], BACKBUFFER_STR_SIZE -1, "%s: %s\r\n", user, message);
+							snprintf(chanbuf[ei], BACKBUFFER_STR_SIZE -1, "%s: %s", user, message);
 							fflush(f);
 							ei++; bc++;
 							if (bc >= BACKBUFFER_SIZE) {
@@ -146,6 +219,7 @@ int main( int argc, char **argv ) {
 								if (strlen(chanbuf[oi]) == 0) continue;
 								raw(prefix);
 								raw(chanbuf[oi]);
+								raw("\r\n");
 								sleep(1);
 							} // while
 

@@ -1,4 +1,4 @@
-CFLAGS=-Wall -g -I. -O2 
+CFLAGS=-Wall -ggdb -I. 
 
 OBJ=picoflexbot
 default: picoflexbot
@@ -12,4 +12,4 @@ picoflexbot: picoflexbot.c
 	${CC} ${CFLAGS} picoflexbot.c -o picoflexbot 
 
 clean:
-	rm -f *.o *core 
+	rm -f *.o *core picoflexbot
