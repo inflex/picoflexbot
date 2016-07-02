@@ -85,14 +85,14 @@ int main( int argc, char **argv ) {
 		while (1) {
 			int c, bp;
 			/** load the next line from the old log 
-			 */
+			*/
 			bp = 0;
 
 			chanbuf[ei][0] = '\0';
 			while (bp < BACKBUFFER_STR_SIZE-1) {
 				c = fgetc(f);
 				if (c == EOF) {
-				  	break;
+					break;
 				}
 
 				if ( c == '\r') continue;
@@ -127,107 +127,112 @@ int main( int argc, char **argv ) {
 		fprintf(stderr,"Can't open log file (%s)\n", strerror(errno));
 		exit(1);
 	}
-	
-//	exit(1);
 
-	fprintf(stdout,"Connecting to server: %s:%s, channel %s, as user %s\n", server, port, channel, nick);
-	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	getaddrinfo(server, port, &hints, &res);
-	conn = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-	connect(conn, res->ai_addr, res->ai_addrlen);
+	//	exit(1);
 
-	raw("USER %s 0 0 :%s\r\n", nick, nick);
-	raw("NICK %s\r\n", nick);
+	while (1) {
+		fprintf(stdout,"Connecting to server: %s:%s, channel %s, as user %s\n", server, port, channel, nick);
+		memset(&hints, 0, sizeof hints);
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+		getaddrinfo(server, port, &hints, &res);
+		conn = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		connect(conn, res->ai_addr, res->ai_addrlen);
 
-	while ((sl = read(conn, sbuf, NETBUF_SIZE))) {
-		for (i = 0; i < sl; i++) {
-			o++;
-			buf[o] = sbuf[i];
-			if ((i > 0 && sbuf[i] == '\n' && sbuf[i - 1] == '\r') || o == NETBUF_SIZE) {
+		raw("USER %s 0 0 :%s\r\n", nick, nick);
+		raw("NICK %s\r\n", nick);
 
-				if (buf[o] == '\n') buf[o] = '\0';
-				if (buf[o-1] == '\r') buf[o-1] = '\0';
+		while ((sl = read(conn, sbuf, NETBUF_SIZE))) {
+			for (i = 0; i < sl; i++) {
+				o++;
+				buf[o] = sbuf[i];
+				if ((i > 0 && sbuf[i] == '\n' && sbuf[i - 1] == '\r') || o == NETBUF_SIZE) {
 
-				buf[o + 1] = '\0';
-				l = o;
-				o = -1;
+					if (buf[o] == '\n') buf[o] = '\0';
+					if (buf[o-1] == '\r') buf[o-1] = '\0';
 
-				printf(">> %s\n", buf);
+					buf[o + 1] = '\0';
+					l = o;
+					o = -1;
 
-				if (!strncmp(buf, "PING", 4)) {
-					buf[1] = 'O';
-					raw(buf);
-				} else if (buf[0] == ':') {
-					wordcount = 0;
-					user = command = where = message = NULL;
-					for (j = 1; j < l; j++) {
-						if (buf[j] == ' ') {
-							buf[j] = '\0';
-							wordcount++;
-							switch(wordcount) {
-								case 1: user = buf + 1; break;
-								case 2: command = buf + start; break;
-								case 3: where = buf + start; break;
+					printf(">> %s\n", buf);
+
+					if (!strncmp(buf, "PING", 4)) {
+						buf[1] = 'O';
+						raw(buf);
+					} else if (buf[0] == ':') {
+						wordcount = 0;
+						user = command = where = message = NULL;
+						for (j = 1; j < l; j++) {
+							if (buf[j] == ' ') {
+								buf[j] = '\0';
+								wordcount++;
+								switch(wordcount) {
+									case 1: user = buf + 1; break;
+									case 2: command = buf + start; break;
+									case 3: where = buf + start; break;
+								}
+								if (j == l - 1) continue;
+								start = j + 1;
+							} else if (buf[j] == ':' && wordcount == 3) {
+								if (j < l - 1) message = buf + j + 1;
+								break;
 							}
-							if (j == l - 1) continue;
-							start = j + 1;
-						} else if (buf[j] == ':' && wordcount == 3) {
-							if (j < l - 1) message = buf + j + 1;
-							break;
 						}
-					}
 
-					if (wordcount < 2) continue;
+						if (wordcount < 2) continue;
 
-					if (!strncmp(command, "001", 3) && channel != NULL) {
-						raw("JOIN %s\r\n", channel);
-					} else if (!strncmp(command, "PRIVMSG", 7) || !strncmp(command, "NOTICE", 6)) {
-						if (where == NULL || message == NULL) continue;
-						if ((sep = strchr(user, '!')) != NULL) user[sep - user] = '\0';
-						if (where[0] == '#' || where[0] == '&' || where[0] == '+' || where[0] == '!') {
-							// Channel chat
-							target = where;
-							fprintf(f,"%s: %s\n", user, message);
-							snprintf(chanbuf[ei], BACKBUFFER_STR_SIZE -1, "%s: %s", user, message);
-							fflush(f);
-							ei++; bc++;
-							if (bc >= BACKBUFFER_SIZE) {
-								si++;
-								bc = BACKBUFFER_SIZE;
-							}
-							ei = ei%BACKBUFFER_SIZE;
-							si = si%BACKBUFFER_SIZE;
+						if (!strncmp(command, "001", 3) && channel != NULL) {
+							raw("JOIN %s\r\n", channel);
+						} else if (!strncmp(command, "PRIVMSG", 7) || !strncmp(command, "NOTICE", 6)) {
+							if (where == NULL || message == NULL) continue;
+							if ((sep = strchr(user, '!')) != NULL) user[sep - user] = '\0';
+							if (where[0] == '#' || where[0] == '&' || where[0] == '+' || where[0] == '!') {
+								// Channel chat
+								target = where;
+								fprintf(f,"%s: %s\n", user, message);
+								snprintf(chanbuf[ei], BACKBUFFER_STR_SIZE -1, "%s: %s", user, message);
+								fflush(f);
+								ei++; bc++;
+								if (bc >= BACKBUFFER_SIZE) {
+									si++;
+									bc = BACKBUFFER_SIZE;
+								}
+								ei = ei%BACKBUFFER_SIZE;
+								si = si%BACKBUFFER_SIZE;
 
-						} // Channel chat
-						else {
-							// Private chat
-							char prefix[BACKBUFFER_STR_SIZE];
-							int linecount;
-							int ci;
-							target = user;
-							snprintf(prefix,sizeof(prefix),"PRIVMSG %s :", target);
-							linecount = atoi(message);
-							if (linecount > bc) linecount = bc;
+							} // Channel chat
+							else {
+								// Private chat
+								char prefix[BACKBUFFER_STR_SIZE];
+								int linecount;
+								int ci;
+								target = user;
+								snprintf(prefix,sizeof(prefix),"PRIVMSG %s :", target);
+								linecount = atoi(message);
+								if (linecount > bc) linecount = bc;
 
 
-							if (linecount > ei) ci = ei -linecount +BACKBUFFER_SIZE; else ci = ei -linecount;
-							while (linecount--) {
-								int oi = ci%BACKBUFFER_SIZE;
-								ci++;
-								if (strlen(chanbuf[oi]) == 0) continue;
-								raw(prefix);
-								raw(chanbuf[oi]);
-								raw("\r\n");
-								sleep(1);
-							} // while
+								if (linecount > ei) ci = ei -linecount +BACKBUFFER_SIZE; else ci = ei -linecount;
+								while (linecount--) {
+									int oi = ci%BACKBUFFER_SIZE;
+									ci++;
+									if (strlen(chanbuf[oi]) == 0) continue;
+									raw(prefix);
+									raw(chanbuf[oi]);
+									raw("\r\n");
+									sleep(1);
+								} // while
 
-						} // private chat
-					} // message or notice data
-				} // : prefix data
-			}
-		} // for each char in the net rx data
-	} // while we have a connection...
+							} // private chat
+						} // message or notice data
+					} // : prefix data
+				}
+			} // for each char in the net rx data
+		} // while we have a connection...
+		fprintf(stdout,"Connection has terminated, waiting 10 seconds before trying again...\n");
+		sleep(10);
+		fprintf(stdout,"Trying again\n");
+	} // loop for infinity, if we need to exit hit CTRL-C
 	return 0;
 }
