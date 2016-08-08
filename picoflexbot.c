@@ -13,6 +13,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <netdb.h>
+#include <time.h>
 
 #define NETBUF_SIZE 512
 #define BACKBUFFER_SIZE 100		// how many lines of conversation to keep (this memory is permanently used!)
@@ -35,6 +36,8 @@ void raw(char *fmt, ...) {
 
 int main( int argc, char **argv ) {
 
+	time_t t = time(NULL);
+			char tb[100];
 	char chanbuf[BACKBUFFER_SIZE][BACKBUFFER_STR_SIZE];
 	int si, ei, bc; // rolling buffer parameters
 	FILE *f;
@@ -105,7 +108,9 @@ int main( int argc, char **argv ) {
 
 			chanbuf[ei][bp] = '\0';
 
-			fprintf(stdout, "%d:%s\n", ei, chanbuf[ei]);
+			t = time(NULL);
+			strftime(tb, sizeof(tb), "%c", localtime(&t));
+			fprintf(stdout, "%30s:%d:%s\n", tb, ei, chanbuf[ei]);
 
 			if (c == EOF) break;
 
@@ -182,6 +187,9 @@ int main( int argc, char **argv ) {
 
 						if (wordcount < 2) continue;
 
+								t = time(NULL);
+								strftime(tb, sizeof(tb), "%c", localtime(&t));
+
 						if (!strncmp(command, "001", 3) && channel != NULL) {
 							raw("JOIN %s\r\n", channel);
 						} else if (!strncmp(command, "PRIVMSG", 7) || !strncmp(command, "NOTICE", 6)) {
@@ -190,8 +198,8 @@ int main( int argc, char **argv ) {
 							if (where[0] == '#' || where[0] == '&' || where[0] == '+' || where[0] == '!') {
 								// Channel chat
 								target = where;
-								fprintf(f,"%s: %s\n", user, message);
-								snprintf(chanbuf[ei], BACKBUFFER_STR_SIZE -1, "%s: %s", user, message);
+								fprintf(f,"%s:%s: %s\n", tb, user, message);
+								snprintf(chanbuf[ei], BACKBUFFER_STR_SIZE -1, "%s:%s: %s", tb, user, message);
 								fflush(f);
 								ei++; bc++;
 								if (bc >= BACKBUFFER_SIZE) {
